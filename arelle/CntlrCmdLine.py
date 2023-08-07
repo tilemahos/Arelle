@@ -1,3 +1,9 @@
+
+# Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+
+#line 153 προσθηκη παραμέτρου SeqNo
+#line 538 προσθηκη της seqNo στο log 
+
 '''
 This module is Arelle's controller in command line non-interactive mode
 
@@ -150,6 +156,8 @@ def parseAndRun(args):
                       help=_("Specify a disclosure system name and"
                              " select disclosure system validation.  "
                              "Enter --disclosureSystem=help for list of names or help-verbose for list of names and descriptions. "))
+    parser.add_option("--seqNo", "--seqNo", action="store", dest="seqNo",
+                      help=_("seqNo is incoming message sequence_no "))
     parser.add_option("--hmrc", action="store_true", dest="validateHMRC",
                       help=_("Select U.K. HMRC disclosure system validation."))
     parser.add_option("--utr", action="store_true", dest="utrValidate",
@@ -529,6 +537,9 @@ class CntlrCmdLine(Cntlr.Cntlr):
         """
         for b in BETA_FEATURES_AND_DESCRIPTIONS.keys():
             self.betaFeatures[b] = getattr(options, b)
+        if options.seqNo:
+            self.addToLog(options.seqNo, messageCode="seqNo")
+            print(options.seqNo);
         if options.statusPipe or options.monitorParentProcess:
             try:
                 global win32file, win32api, win32process, pywintypes

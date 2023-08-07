@@ -1,3 +1,9 @@
+# Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+
+#line 231   add SeqNo
+#line 235  	differentiate error messagew for empty file and no zip file  
+
+
 '''
 Use this module to start Arelle in web server mode
 
@@ -222,13 +228,17 @@ def validation(file=None):
     isValidation = 'validation' == requestPathParts[-1] or 'validation' == requestPathParts[-2]
     view = request.query.view
     viewArcrole = request.query.viewArcrole
+    seqNo = request.query.seqNo
     if request.method == 'POST':
         mimeType = request.get_header("Content-Type")
         if mimeType.startswith("multipart/form-data"):
             _upload = request.files.get("upload")
-            if not _upload or not _upload.filename.endswith(".zip"):
-                errors.append(_("POST file upload must be a zip file"))
+            if not _upload:
+                errors.append(_("POST file upload is empty"))
                 sourceZipStream = None
+            elif not _upload.filename.endswith(".zip"):
+                errors.append(_("POST file upload is not zip file"))
+                sourceZipStream = None				
             else:
                 sourceZipStream = _upload.file
         elif mimeType not in ('application/zip', 'application/x-zip', 'application/x-zip-compressed', 'multipart/x-zip'):

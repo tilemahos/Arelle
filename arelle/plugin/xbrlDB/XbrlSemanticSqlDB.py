@@ -1,3 +1,13 @@
+
+# Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+
+#line 95,783   I changed resource to xresource  (see comments on xbrlSemanticOracleDB.sql)
+#line 99  	   I removed the drop of the objects (the whole schema) in case of missing tables very dangerous. As Arelle suggests we must create the 
+#              schema with xbrlSemanticOracleDB.sql script from sqlplus and not from the plugin. So I think it is wrong to recreate it from the plugin.
+#line 975,1046 startDatetime is filled with instant period startdate time because if it is null query fails 
+
+
+
 '''
 XbrlSemanticSqlDB.py implements an SQL database interface for Arelle, based
 on a concrete realization of the Abstract Model PWD 2.0 layer.  This is a semantic
@@ -82,7 +92,7 @@ XBRLDBTABLES = {
                 "filing", "report",
                 "document", "referenced_documents",
                 "aspect", "data_type", "role_type", "arcrole_type",
-                "resource", "relationship_set", "root", "relationship",
+                "xresource", "relationship_set", "root", "relationship",
                 "data_point", "entity", "period", "unit", "unit_measure", "aspect_value_selection",
                 "message", "message_reference",
                 "industry", "industry_level", "industry_structure",
@@ -93,18 +103,6 @@ XBRLDBTABLES = {
 class XbrlSqlDatabaseConnection(SqlDbConnection):
     def verifyTables(self):
         missingTables = XBRLDBTABLES - self.tablesInDB()
-        # if no tables, initialize database
-        if missingTables == XBRLDBTABLES:
-            self.create(os.path.join("sql", "semantic", {"mssql": "xbrlSemanticMSSqlDB.sql",
-                                                         "mysql": "xbrlSemanticMySqlDB.ddl",
-                                                         "sqlite": "xbrlSemanticSQLiteDB.ddl",
-                                                         "orcl": "xbrlSemanticOracleDB.sql",
-                                                         "postgres": "xbrlSemanticPostgresDB.ddl"}[self.product]))
-            missingTables = XBRLDBTABLES - self.tablesInDB()
-        if missingTables and missingTables != {"sequences"}:
-            raise XPDBException("sqlDB:MissingTables",
-                                _("The following tables are missing: %(missingTableNames)s"),
-                                missingTableNames=', '.join(t for t in sorted(missingTables)))
 
     def insertXbrl(self, entrypoint, rssItem):
         try:
@@ -782,7 +780,7 @@ class XbrlSqlDatabaseConnection(SqlDbConnection):
                                for rel in self.modelXbrl.relationshipSet(arcrole).modelRelationships
                                for resource in (rel.fromModelObject, rel.toModelObject)
                                if isinstance(resource, ModelResource))
-        table = self.getTable('resource', 'resource_id',
+        table = self.getTable('xresource', 'resource_id',
                               ('document_id', 'xml_id', 'xml_child_seq', 'qname', 'role', 'value', 'xml_lang'),
                               ('document_id', 'xml_child_seq'),
                               tuple((self.documentIds[resource.modelDocument],
@@ -972,7 +970,7 @@ class XbrlSqlDatabaseConnection(SqlDbConnection):
                               ('report_id', 'start_date', 'end_date', 'is_instant', 'is_forever'),
                               ('report_id', 'start_date', 'end_date', 'is_instant', 'is_forever'),
                               set((reportId,
-                                   cntx.startDatetime if cntx.isStartEndPeriod else None,
+                                   cntx.startDatetime if (cntx.isStartEndPeriod or cntx.isInstantPeriod) else None,
                                    cntx.endDatetime if (cntx.isStartEndPeriod or cntx.isInstantPeriod) else None,
                                    cntx.isInstantPeriod,
                                    cntx.isForeverPeriod)
@@ -1043,7 +1041,7 @@ class XbrlSqlDatabaseConnection(SqlDbConnection):
                                   self.entityIdentifierId.get((reportId, cntx.entityIdentifier[0], cntx.entityIdentifier[1]))
                                       if cntx is not None else None,
                                       self.periodId.get((reportId,
-                                                    cntx.startDatetime if cntx.isStartEndPeriod else None,
+                                                    cntx.startDatetime if (cntx.isStartEndPeriod or cntx.isInstantPeriod) else None,
                                                     cntx.endDatetime if (cntx.isStartEndPeriod or cntx.isInstantPeriod) else None,
                                                     cntx.isInstantPeriod,
                                                     cntx.isForeverPeriod)) if cntx is not None else None,

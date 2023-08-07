@@ -1,35 +1,33 @@
 -- This SQL script initializes a database for the XBRL Abstract Model using Oracle SQL
 -- See COPYRIGHT.md for copyright information.
 
+-- Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+/*
+I change bigint to NUMBER(19) according to https://docs.oracle.com/cd/B19306_01/gateways.102/b14270/apa.htm
+remove  / erroneous located after CREATE INDEX root_index02 causing previous statement to rerun
+change entity_identifier table definition primary key from entity_id to entity_identifier_id
+change insert trigger for entity_identifier
+CREATE SEQUENCE seq_entity used by entity table trigger
+I removed all the double quotes surrounding the name of the objects (tables, triggers, etc) because in oracle that forces all the name to be in lower case and that is a problem because if you don’t put a name in double quotes then by default oracle translates it to upper case. For example
+                Create table “aaa” ..;
+                Select * from aaa -> table or view does not exist
+                Select * from AAA -> table or view does not exist
+                Select * from “aaa” -> results OK
+And even in the plugin code there were failures because of this because some times tables where refered without double quotes. An other approach would be to correct the code by adding double quotes at every reference, but I don’t suggest that because in oracle creating tables in double quotes is a bad practice.
+There was a side effect of that change resource cannot be used as a table name because it is reserved so I renamed it to xresource
+
+I removed drop commands because they are dangerous for deleting all data by mistake
+*/
+
+
 -- note that any "&" must be quoted with double-quotes
 set define off;
 
--- drop triggers
-begin
-   for t in (select trigger_name from user_triggers)
-   loop
-       execute immediate 'drop trigger "' || t.trigger_name || '"';
-   end loop;
-end;
-/
--- drop tables
-begin
-   for t in (select table_name from user_tables)
-   loop
-       execute immediate 'drop table "' || t.table_name || '" CASCADE CONSTRAINTS PURGE ';
-   end loop;
-end;
-/
--- drop sequences
-begin
-   for s in (select sequence_name from user_sequences)
-   loop
-       execute immediate 'drop sequence "' || s.sequence_name || '"';
-   end loop;
-end;
-/
 
-CREATE TABLE "entity" (
+
+CREATE SEQUENCE seq_entity;
+
+CREATE TABLE entity (
     entity_id number(19) NOT NULL,
     legal_entity_number varchar2(30), -- LEI
     file_number varchar2(30), -- authority internal number
@@ -56,29 +54,29 @@ CREATE TABLE "entity" (
     public_float binary_double,
     trading_symbol varchar2(32)
 );
-CREATE INDEX entity_index01 ON "entity" (entity_id);
-CREATE INDEX entity_index02 ON "entity" (file_number);
-CREATE INDEX entity_index03 ON "entity" (reference_number);
-CREATE INDEX entity_index04 ON "entity" (legal_entity_number);
-CREATE INDEX entity_index05 ON "entity" (legal_entity_number, file_number);
+CREATE INDEX entity_index01 ON entity (entity_id);
+CREATE INDEX entity_index02 ON entity (file_number);
+CREATE INDEX entity_index03 ON entity (reference_number);
+CREATE INDEX entity_index04 ON entity (legal_entity_number);
+CREATE INDEX entity_index05 ON entity (legal_entity_number, file_number);
 
-CREATE TRIGGER entity_insert_trigger BEFORE INSERT ON "entity" 
+CREATE TRIGGER entity_insert_trigger BEFORE INSERT ON entity 
   FOR EACH ROW
     BEGIN
        SELECT seq_entity.NEXTVAL INTO :NEW.entity_id from dual;
     END;
 /
 
-CREATE TABLE "former_entity" (
+CREATE TABLE former_entity (
     entity_id number(19) NOT NULL,
     date_changed date,
     former_name varchar2(1024)
 );
-CREATE INDEX former_entity_index02 ON "former_entity" (entity_id);
+CREATE INDEX former_entity_index02 ON former_entity (entity_id);
 
 CREATE SEQUENCE seq_filing;
 
-CREATE TABLE "filing" (
+CREATE TABLE filing (
     filing_id number(19) NOT NULL,
     filing_number varchar2(30) NOT NULL,
     form_type varchar2(30),
@@ -91,21 +89,21 @@ CREATE TABLE "filing" (
     authority_html_url nclob,
     entry_url nclob
 );
-CREATE INDEX filing_index01 ON "filing" (filing_id);
-CREATE UNIQUE INDEX filing_index02 ON "filing" (filing_number);
+CREATE INDEX filing_index01 ON filing (filing_id);
+CREATE UNIQUE INDEX filing_index02 ON filing (filing_number);
 
-CREATE TRIGGER filing_insert_trigger BEFORE INSERT ON "filing" 
+CREATE TRIGGER filing_insert_trigger BEFORE INSERT ON filing 
   FOR EACH ROW
     BEGIN
        SELECT seq_filing.NEXTVAL INTO :NEW.filing_id from dual;
     END;
 /
 
--- object sequence can be any element that can terminate a relationship (aspect, type, resource, data point, document, role type, ...)
+-- object sequence can be any element that can terminate a relationship (aspect, type, xresource, data point, document, role type, ...)
 -- or be a reference of a message (report or any of above)
 CREATE SEQUENCE seq_object;
 
-CREATE TABLE "report" (
+CREATE TABLE report (
     report_id number(19) NOT NULL,
     filing_id number(19) NOT NULL,
     report_data_doc_id number(19),  -- instance or primary inline document
@@ -113,25 +111,25 @@ CREATE TABLE "report" (
     agency_schema_doc_id number(19),  -- agency schema (receiving authority)
     standard_schema_doc_id number(19)  -- e.g., IFRS, XBRL-US, or EDInet schema
 );
-CREATE INDEX report_index01 ON "report" (report_id);
-CREATE INDEX report_index02 ON "report" (filing_id);
+CREATE INDEX report_index01 ON report (report_id);
+CREATE INDEX report_index02 ON report (filing_id);
 
-CREATE TRIGGER report_insert_trigger BEFORE INSERT ON "report"
+CREATE TRIGGER report_insert_trigger BEFORE INSERT ON report
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.report_id from dual;
     END;
 /
-CREATE TABLE "document" (
+CREATE TABLE document (
     document_id number(19) NOT NULL,
     document_url varchar2(2048) NOT NULL,
     document_type varchar2(32),  -- ModelDocument.Type string value
     namespace varchar2(1024),  -- targetNamespace if schema else NULL
     PRIMARY KEY (document_id)
 );
-CREATE INDEX document_index02 ON "document" (document_url) COMPRESS;
+CREATE INDEX document_index02 ON document (document_url) COMPRESS;
 
-CREATE TRIGGER document_insert_trigger BEFORE INSERT ON "document" 
+CREATE TRIGGER document_insert_trigger BEFORE INSERT ON document 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.document_id from dual;
@@ -139,14 +137,14 @@ CREATE TRIGGER document_insert_trigger BEFORE INSERT ON "document"
 /
 -- documents referenced by report or document
 
-CREATE TABLE "referenced_documents" (
+CREATE TABLE referenced_documents (
     object_id number(19) NOT NULL,
     document_id number(19) NOT NULL
 );
-CREATE INDEX referenced_documents_index01 ON "referenced_documents" (object_id);
-CREATE UNIQUE INDEX referenced_documents_index02 ON "referenced_documents" (object_id, document_id);
+CREATE INDEX referenced_documents_index01 ON referenced_documents (object_id);
+CREATE UNIQUE INDEX referenced_documents_index02 ON referenced_documents (object_id, document_id);
 
-CREATE TABLE "aspect" (
+CREATE TABLE aspect (
     aspect_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     xml_id nclob,
@@ -165,16 +163,16 @@ CREATE TABLE "aspect" (
     is_text_block number(1) NOT NULL,
     PRIMARY KEY (aspect_id)
 );
-CREATE INDEX aspect_index02 ON "aspect" (document_id);
-CREATE INDEX aspect_index03 ON "aspect" (qname) COMPRESS;
+CREATE INDEX aspect_index02 ON aspect (document_id);
+CREATE INDEX aspect_index03 ON aspect (qname) COMPRESS;
 
-CREATE TRIGGER aspect_insert_trigger BEFORE INSERT ON "aspect" 
+CREATE TRIGGER aspect_insert_trigger BEFORE INSERT ON aspect 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.aspect_id from dual;
     END;
 /
-CREATE TABLE "data_type" (
+CREATE TABLE data_type (
     data_type_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     xml_id nclob,
@@ -185,16 +183,16 @@ CREATE TABLE "data_type" (
     derived_from_type_id number(19),
     PRIMARY KEY (data_type_id)
 );
-CREATE INDEX data_type_index02 ON "data_type" (document_id);
-CREATE INDEX data_type_index03 ON "data_type" (qname) COMPRESS;
+CREATE INDEX data_type_index02 ON data_type (document_id);
+CREATE INDEX data_type_index03 ON data_type (qname) COMPRESS;
 
-CREATE TRIGGER data_type_insert_trigger BEFORE INSERT ON "data_type" 
+CREATE TRIGGER data_type_insert_trigger BEFORE INSERT ON data_type 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.data_type_id from dual;
     END;
 /
-CREATE TABLE "role_type" (
+CREATE TABLE role_type (
     role_type_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     xml_id nclob,
@@ -203,16 +201,16 @@ CREATE TABLE "role_type" (
     definition nclob,
     PRIMARY KEY (role_type_id)
 );
-CREATE INDEX role_type_index02 ON "role_type" (document_id);
-CREATE INDEX role_type_index03 ON "role_type" (role_uri) COMPRESS;
+CREATE INDEX role_type_index02 ON role_type (document_id);
+CREATE INDEX role_type_index03 ON role_type (role_uri) COMPRESS;
 
-CREATE TRIGGER role_type_insert_trigger BEFORE INSERT ON "role_type" 
+CREATE TRIGGER role_type_insert_trigger BEFORE INSERT ON role_type 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.role_type_id from dual;
     END;
 /
-CREATE TABLE "arcrole_type" (
+CREATE TABLE arcrole_type (
     arcrole_type_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     xml_id nclob,
@@ -222,23 +220,23 @@ CREATE TABLE "arcrole_type" (
     definition nclob,
     PRIMARY KEY (arcrole_type_id)
 );
-CREATE INDEX arcrole_type_index02 ON "arcrole_type" (document_id);
-CREATE INDEX arcrole_type_index03 ON "arcrole_type" (arcrole_uri) COMPRESS;
+CREATE INDEX arcrole_type_index02 ON arcrole_type (document_id);
+CREATE INDEX arcrole_type_index03 ON arcrole_type (arcrole_uri) COMPRESS;
 
-CREATE TRIGGER arcrole_type_insert_trigger BEFORE INSERT ON "arcrole_type" 
+CREATE TRIGGER arcrole_type_insert_trigger BEFORE INSERT ON arcrole_type 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.arcrole_type_id from dual;
     END;
 /
-CREATE TABLE "used_on" (
+CREATE TABLE used_on (
     object_id number(19) NOT NULL,
     aspect_id number(19) NOT NULL
 );
-CREATE INDEX used_on_index01 ON "used_on" (object_id);
-CREATE UNIQUE INDEX used_on_index02 ON "used_on" (object_id, aspect_id);
+CREATE INDEX used_on_index01 ON used_on (object_id);
+CREATE UNIQUE INDEX used_on_index02 ON used_on (object_id, aspect_id);
 
-CREATE TABLE "resource" (
+CREATE TABLE xresource (
     resource_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     xml_id nclob,
@@ -249,9 +247,9 @@ CREATE TABLE "resource" (
     xml_lang varchar2(16),
     PRIMARY KEY (resource_id)
 );
-CREATE UNIQUE INDEX resource_index02 ON "resource" (document_id, xml_child_seq);
+CREATE UNIQUE INDEX resource_index02 ON xresource (document_id, xml_child_seq);
 
-CREATE TRIGGER resource_insert_trigger BEFORE INSERT ON "resource" 
+CREATE TRIGGER resource_insert_trigger BEFORE INSERT ON xresource 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.resource_id from dual;
@@ -259,7 +257,7 @@ CREATE TRIGGER resource_insert_trigger BEFORE INSERT ON "resource"
 /
 CREATE SEQUENCE seq_relationship_set;
 
-CREATE TABLE "relationship_set" (
+CREATE TABLE relationship_set (
     relationship_set_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     arc_qname varchar2(1024) NOT NULL,  -- clark notation qname (do we need this?)
@@ -268,24 +266,24 @@ CREATE TABLE "relationship_set" (
     link_role varchar2(1024) NOT NULL,
     PRIMARY KEY (relationship_set_id)
 );
-CREATE INDEX relationship_set_index02 ON "relationship_set" (document_id);
-CREATE INDEX relationship_set_index03 ON "relationship_set" (link_role) COMPRESS;
-CREATE INDEX relationship_set_index04 ON "relationship_set" (arc_role) COMPRESS;
+CREATE INDEX relationship_set_index02 ON relationship_set (document_id);
+CREATE INDEX relationship_set_index03 ON relationship_set (link_role) COMPRESS;
+CREATE INDEX relationship_set_index04 ON relationship_set (arc_role) COMPRESS;
 
-CREATE TRIGGER rel_set_insert_trigger BEFORE INSERT ON "relationship_set" 
+CREATE TRIGGER rel_set_insert_trigger BEFORE INSERT ON relationship_set 
   FOR EACH ROW
     BEGIN
        SELECT seq_relationship_set.NEXTVAL INTO :NEW.relationship_set_id from dual;
     END;
 /
 
-CREATE TABLE "root" (
+CREATE TABLE root (
     relationship_set_id number(19) NOT NULL,
     relationship_id number(19) NOT NULL
 );
-CREATE INDEX root_index02 ON "root" (relationship_set_id);
-/
-CREATE TABLE "relationship" (
+CREATE INDEX root_index02 ON root (relationship_set_id);
+
+CREATE TABLE relationship (
     relationship_id number(19) NOT NULL,
     document_id number(19) NOT NULL,
     xml_id nclob,
@@ -300,18 +298,18 @@ CREATE TABLE "relationship" (
     preferred_label_role varchar2(1024),
     PRIMARY KEY (relationship_id)
 );
-CREATE INDEX relationship_index02 ON "relationship" (relationship_set_id);
-CREATE INDEX relationship_index03 ON "relationship" (relationship_set_id, tree_depth);
-CREATE INDEX relationship_index04 ON "relationship" (relationship_set_id, document_id, xml_child_seq);
-CREATE INDEX relationship_index05 ON "relationship" (from_id);
+CREATE INDEX relationship_index02 ON relationship (relationship_set_id);
+CREATE INDEX relationship_index03 ON relationship (relationship_set_id, tree_depth);
+CREATE INDEX relationship_index04 ON relationship (relationship_set_id, document_id, xml_child_seq);
+CREATE INDEX relationship_index05 ON relationship (from_id);
 
-CREATE TRIGGER relationship_insert_trigger BEFORE INSERT ON "relationship" 
+CREATE TRIGGER relationship_insert_trigger BEFORE INSERT ON relationship 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.relationship_id from dual;
     END;
 /
-CREATE TABLE "data_point" (
+CREATE TABLE data_point (
     datapoint_id number(19) NOT NULL,
     report_id number(19),
     document_id number(19) NOT NULL,  -- multiple inline documents are sources of data points
@@ -332,32 +330,32 @@ CREATE TABLE "data_point" (
     value nclob,
     PRIMARY KEY (datapoint_id)
 );
-CREATE INDEX data_point_index02 ON "data_point" (document_id, xml_child_seq);
-CREATE INDEX data_point_index03 ON "data_point" (report_id);
-CREATE INDEX data_point_index04 ON "data_point" (aspect_id);
+CREATE INDEX data_point_index02 ON data_point (document_id, xml_child_seq);
+CREATE INDEX data_point_index03 ON data_point (report_id);
+CREATE INDEX data_point_index04 ON data_point (aspect_id);
 
-CREATE TRIGGER data_point_insert_trigger BEFORE INSERT ON "data_point" 
+CREATE TRIGGER data_point_insert_trigger BEFORE INSERT ON data_point 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.datapoint_id from dual;
     END;
 /
-CREATE TABLE "entity_identifier" (
+CREATE TABLE entity_identifier (
     entity_identifier_id number(19) NOT NULL,
     report_id number(19),
     scheme varchar2(1024) NOT NULL,
     identifier varchar2(1024) NOT NULL,
-    PRIMARY KEY (entity_id)
+    PRIMARY KEY (entity_identifier_id)
 );
-CREATE INDEX entity_identifier_index02 ON "entity_identifier" (report_id, scheme, identifier);
+CREATE INDEX entity_identifier_index02 ON entity_identifier (report_id, scheme, identifier);
 
-CREATE TRIGGER entity_insert_trigger BEFORE INSERT ON "entity" 
+CREATE TRIGGER entity_identifier_ins_trigger BEFORE INSERT ON entity_identifier 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.entity_identifier_id from dual;
     END;
 /
-CREATE TABLE "period" (
+CREATE TABLE period (
     period_id number(19) NOT NULL,
     report_id number(19),
     start_date date,
@@ -366,15 +364,15 @@ CREATE TABLE "period" (
     is_forever number(1) NOT NULL,
     PRIMARY KEY (period_id)
 );
-CREATE INDEX period_index02 ON "period" (report_id, start_date, end_date, is_instant, is_forever);
+CREATE INDEX period_index02 ON period (report_id, start_date, end_date, is_instant, is_forever);
 
-CREATE TRIGGER period_insert_trigger BEFORE INSERT ON "period" 
+CREATE TRIGGER period_insert_trigger BEFORE INSERT ON period 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.period_id from dual;
     END;
 /
-CREATE TABLE "unit" (
+CREATE TABLE unit (
     unit_id number(19) NOT NULL,
     report_id number(19),
     xml_id nclob,
@@ -382,59 +380,59 @@ CREATE TABLE "unit" (
     measures_hash varchar2(36),
     PRIMARY KEY (unit_id)
 );
-CREATE INDEX unit_index02 ON "unit" (report_id, measures_hash);
+CREATE INDEX unit_index02 ON unit (report_id, measures_hash);
 
-CREATE TRIGGER unit_insert_trigger BEFORE INSERT ON "unit" 
+CREATE TRIGGER unit_insert_trigger BEFORE INSERT ON unit 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.unit_id from dual;
     END;
 /
-CREATE TABLE "unit_measure" (
+CREATE TABLE unit_measure (
     unit_id number(19) NOT NULL,
     qname varchar2(1024) NOT NULL,  -- clark notation qname (first if multiple)
     measures_hash char(32),
     is_multiplicand number(1) NOT NULL
 );
-CREATE INDEX unit_measure_index01 ON "unit_measure" (unit_id);
-CREATE INDEX unit_measure_index02 ON "unit_measure" (unit_id, qname, is_multiplicand);
+CREATE INDEX unit_measure_index01 ON unit_measure (unit_id);
+CREATE INDEX unit_measure_index02 ON unit_measure (unit_id, qname, is_multiplicand);
 
-CREATE TABLE "aspect_value_selection_set" (
+CREATE TABLE aspect_value_selection_set (
     aspect_value_selection_id number(19) NOT NULL,
     report_id number(19)
 );
-CREATE UNIQUE INDEX aspect_value_sel_set_index01 ON "aspect_value_selection_set" (aspect_value_selection_id);
-CREATE INDEX aspect_value_sel_set_index02 ON "aspect_value_selection_set" (report_id);
+CREATE UNIQUE INDEX aspect_value_sel_set_index01 ON aspect_value_selection_set (aspect_value_selection_id);
+CREATE INDEX aspect_value_sel_set_index02 ON aspect_value_selection_set (report_id);
 
-CREATE TRIGGER aspect_value_sel_ins_trigger BEFORE INSERT ON "aspect_value_selection_set" 
+CREATE TRIGGER aspect_value_sel_ins_trigger BEFORE INSERT ON aspect_value_selection_set 
   FOR EACH ROW
     BEGIN
        SELECT seq_object.NEXTVAL INTO :NEW.aspect_value_selection_id from dual;
     END;
 /
-CREATE TABLE "aspect_value_selection" (
+CREATE TABLE aspect_value_selection (
     aspect_value_selection_id number(19) NOT NULL,
     aspect_id number(19) NOT NULL,
     aspect_value_id number(19),
     is_typed_value number(1) NOT NULL,
     typed_value nclob
 );
-CREATE INDEX aspect_value_selection_index01 ON "aspect_value_selection" (aspect_value_selection_id);
-CREATE INDEX aspect_value_selection_index02 ON "aspect_value_selection" (aspect_id);
+CREATE INDEX aspect_value_selection_index01 ON aspect_value_selection (aspect_value_selection_id);
+CREATE INDEX aspect_value_selection_index02 ON aspect_value_selection (aspect_id);
 
-CREATE TABLE "table_data_points"(
-    report_id bigint,
-    object_id bigint NOT NULL, -- may be any role_type or aspect defining a table table with 'seq_object' id
+CREATE TABLE table_data_points(
+    report_id NUMBER(19),
+    object_id number(19) NOT NULL, -- may be any role_type or aspect defining a table table with 'seq_object' id
     table_code varchar2(16),  -- short code of table, like BS, PL, or 4.15.221
-    datapoint_id bigint -- id of data_point in this table (according to its aspects)
+    datapoint_id NUMBER(19) -- id of data_point in this table (according to its aspects)
 );
-CREATE INDEX table_data_points_index01 ON "table_data_points" (report_id);
-CREATE INDEX table_data_points_index02 ON "table_data_points" (table_code);
-CREATE INDEX table_data_points_index03 ON "table_data_points" (datapoint_id);
+CREATE INDEX table_data_points_index01 ON table_data_points (report_id);
+CREATE INDEX table_data_points_index02 ON table_data_points (table_code);
+CREATE INDEX table_data_points_index03 ON table_data_points (datapoint_id);
 
 CREATE SEQUENCE seq_message;
 
-CREATE TABLE "message" (
+CREATE TABLE message (
     message_id number(19) NOT NULL,
     report_id number(19),
     sequence_in_report int,
@@ -443,24 +441,24 @@ CREATE TABLE "message" (
     value nclob,
     PRIMARY KEY (message_id)
 );
-CREATE INDEX message_index02 ON "message" (report_id, sequence_in_report);
+CREATE INDEX message_index02 ON message (report_id, sequence_in_report);
 
-CREATE TRIGGER message_insert_trigger BEFORE INSERT ON "message" 
+CREATE TRIGGER message_insert_trigger BEFORE INSERT ON message 
   FOR EACH ROW
     BEGIN
        SELECT seq_message.NEXTVAL INTO :NEW.message_id from dual;
     END;
 /
-CREATE TABLE "message_reference" (
+CREATE TABLE message_reference (
     message_id number(19) NOT NULL,
     object_id number(19) NOT NULL -- may be any table with 'seq_object' id
 );
-CREATE INDEX message_reference_index01 ON "message_reference" (message_id);
-CREATE UNIQUE INDEX message_reference_index02 ON "message_reference" (message_id, object_id);
+CREATE INDEX message_reference_index01 ON message_reference (message_id);
+CREATE UNIQUE INDEX message_reference_index02 ON message_reference (message_id, object_id);
 
 CREATE SEQUENCE seq_industry;
 
-CREATE TABLE "industry" (
+CREATE TABLE industry (
     industry_id number(19) NOT NULL,
     industry_classification varchar2(16),
     industry_code integer,
@@ -470,7 +468,7 @@ CREATE TABLE "industry" (
     PRIMARY KEY (industry_id)
 );
 
-INSERT INTO "industry" (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
+INSERT INTO industry (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
           SELECT 4315, 'SEC', 3576, 'Computer Communications Equipment', 4, 2424 FROM dual
 UNION ALL SELECT 4316, 'SEC', 4955, 'Hazardous Waste Management', 4, 2552 FROM dual
 UNION ALL SELECT 4317, 'SEC', 4990, 'Hazardous Waste Management', 3, 2792 FROM dual
@@ -1472,7 +1470,7 @@ UNION ALL SELECT 3251, 'SIC', 2899, 'Chemical Preparations, nec', 4, 3246 FROM d
 UNION ALL SELECT 3247, 'SIC', 2891, 'Adhesives & Sealants', 4, 3246 FROM dual
 UNION ALL SELECT 3249, 'SIC', 2893, 'Printing Ink', 4, 3246 FROM dual;
 
-INSERT INTO "industry" (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
+INSERT INTO industry (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
           SELECT 3250, 'SIC', 2895, 'Carbon Black', 4, 3246 FROM dual
 UNION ALL SELECT 2339, 'SEC', 2911, 'Petroleum Refining', 4, 2338 FROM dual
 UNION ALL SELECT 3254, 'SIC', 2911, 'Petroleum Refining', 4, 3253 FROM dual
@@ -2474,7 +2472,7 @@ UNION ALL SELECT 619, 'NAICS', 331313, 'Alumina Refining and Primary Aluminum Pr
 UNION ALL SELECT 620, 'NAICS', 331314, 'Secondary Smelting and Alloying of Aluminum', 5, 618 FROM dual
 UNION ALL SELECT 621, 'NAICS', 331315, 'Aluminum Sheet, Plate, and Foil Manufacturing', 5, 618 FROM dual;
 
-INSERT INTO "industry" (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
+INSERT INTO industry (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
           SELECT 627, 'NAICS', 33142, 'Copper Rolling, Drawing, Extruding, and Alloying', 4, 623 FROM dual
 UNION ALL SELECT 628, 'NAICS', 33149, 'Nonferrous Metal (except Copper and Aluminum) Rolling, Drawing, Extruding, and Alloying', 4, 623 FROM dual
 UNION ALL SELECT 625, 'NAICS', 33141, 'Nonferrous Metal (except Aluminum) Smelting and Refining', 4, 623 FROM dual
@@ -3477,7 +3475,7 @@ UNION ALL SELECT 1639, 'NAICS', 541219, 'Other Accounting Services', 5, 1635 FRO
 UNION ALL SELECT 1638, 'NAICS', 541214, 'Payroll Services', 5, 1635 FROM dual
 UNION ALL SELECT 1637, 'NAICS', 541213, 'Tax Preparation Services', 5, 1635 FROM dual;
 
-INSERT INTO "industry" (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
+INSERT INTO industry (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
           SELECT 1636, 'NAICS', 541211, 'Offices of Certified Public Accountants', 5, 1635 FROM dual
 UNION ALL SELECT 1656, 'NAICS', 54138, 'Testing Laboratories', 4, 1640 FROM dual
 UNION ALL SELECT 1642, 'NAICS', 54131, 'Architectural Services', 4, 1640 FROM dual
@@ -4480,7 +4478,7 @@ UNION ALL SELECT 2505, 'SEC', 3940, 'Toys & Sporting Goods', 3, 2500 FROM dual
 UNION ALL SELECT 2503, 'SEC', 3930, 'Musical Instruments', 3, 2500 FROM dual
 UNION ALL SELECT 2510, 'SEC', 3960, 'Costume Jewelry & Notions', 3, 2500 FROM dual;
 
-INSERT INTO "industry" (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
+INSERT INTO industry (industry_id, industry_classification, industry_code, industry_description, depth, parent_id) 
           SELECT 2511, 'SEC', 3990, 'Miscellaneous Manufacturers', 3, 2500 FROM dual
 UNION ALL SELECT 2501, 'SEC', 3910, 'Jewelry, Silverware & Plated Ware', 3, 2500 FROM dual
 UNION ALL SELECT 2509, 'SEC', 3950, 'Pens, Pencils, Office & Art Supplies', 3, 2500 FROM dual
@@ -4814,7 +4812,7 @@ UNION ALL SELECT 4298, 'SIC', 9710, 'National Security', 3, 4297 FROM dual
 UNION ALL SELECT 4303, 'SIC', 9990, 'Nonclassifiable Establishments', 3, 4302 FROM dual
 ;
 
-CREATE TABLE "industry_level" (
+CREATE TABLE industry_level (
     industry_level_id number(19) NOT NULL,
     industry_classification varchar2(16),
     ancestor_id number(19),
@@ -4826,7 +4824,7 @@ CREATE TABLE "industry_level" (
     PRIMARY KEY (industry_level_id)
 );
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 1, 'SEC', 2677, 6300, 2, 2689, 6390, 3 FROM dual
 UNION ALL SELECT 2, 'NAICS', 1666, 5415, 3, 1671, 541519, 5 FROM dual
 UNION ALL SELECT 3, 'NAICS', 931, 423, 2, 999, 42384, 4 FROM dual
@@ -5828,7 +5826,7 @@ UNION ALL SELECT 998, 'SEC', 2371, 3300, 2, 2375, 3320, 3 FROM dual
 UNION ALL SELECT 999, 'SEC', 2758, 8060, 3, 2759, 8062, 4 FROM dual
 UNION ALL SELECT 1000, 'SIC', 4277, 9500, 2, 4281, 9530, 3 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 1001, 'SIC', 3621, 4210, 3, 3622, 4212, 4 FROM dual
 UNION ALL SELECT 1002, 'NAICS', 56, 112, 2, 76, 11234, 4 FROM dual
 UNION ALL SELECT 1003, 'SIC', 4312, 60, 1, 3984, 6519, 4 FROM dual
@@ -6832,7 +6830,7 @@ UNION ALL SELECT 2000, 'SIC', 3989, 6550, 3, 3990, 6552, 4 FROM dual
 UNION ALL SELECT 2001, 'NAICS', 235, 238, 2, 269, 238350, 5 FROM dual
 UNION ALL SELECT 2002, 'NAICS', 1930, 62421, 4, 1929, 624210, 5 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 2003, 'SIC', 3050, 2200, 2, 3060, 2251, 4 FROM dual
 UNION ALL SELECT 2004, 'SIC', 3167, 2600, 2, 3177, 2655, 4 FROM dual
 UNION ALL SELECT 2005, 'SEC', 2792, 40, 1, 4318, 4991, 3 FROM dual
@@ -7835,7 +7833,7 @@ UNION ALL SELECT 3001, 'NAICS', 1441, 51229, 4, 1440, 512290, 5 FROM dual
 UNION ALL SELECT 3002, 'NAICS', 1480, 52, 1, 1553, 524298, 5 FROM dual
 UNION ALL SELECT 3003, 'SIC', 4146, 8000, 2, 4167, 8071, 4 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 3004, 'SIC', 4311, 52, 1, 3864, 5651, 4 FROM dual
 UNION ALL SELECT 3005, 'NAICS', 218, 237, 2, 224, 237130, 5 FROM dual
 UNION ALL SELECT 3006, 'NAICS', 1420, 5121, 3, 1429, 512191, 5 FROM dual
@@ -8838,7 +8836,7 @@ UNION ALL SELECT 4002, 'SIC', 3214, 2800, 2, 3249, 2893, 4 FROM dual
 UNION ALL SELECT 4003, 'SIC', 3576, 3900, 2, 3582, 3931, 4 FROM dual
 UNION ALL SELECT 4004, 'NAICS', 1625, 541, 2, 1639, 541219, 5 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 4005, 'NAICS', 2071, 812, 2, 2095, 81291, 4 FROM dual
 UNION ALL SELECT 4006, 'NAICS', 931, 423, 2, 989, 423740, 5 FROM dual
 UNION ALL SELECT 4007, 'SIC', 3214, 2800, 2, 3237, 2860, 3 FROM dual
@@ -9841,7 +9839,7 @@ UNION ALL SELECT 5003, 'SIC', 4310, 50, 1, 3799, 5192, 4 FROM dual
 UNION ALL SELECT 5004, 'NAICS', 1954, 71121, 4, 1955, 711211, 5 FROM dual
 UNION ALL SELECT 5005, 'NAICS', 180, 22, 1, 192, 22112, 4 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 5006, 'SEC', 2796, 70, 1, 2777, 8730, 3 FROM dual
 UNION ALL SELECT 5007, 'SIC', 2939, 1500, 2, 2943, 1530, 3 FROM dual
 UNION ALL SELECT 5008, 'SIC', 4308, 20, 1, 3076, 2284, 4 FROM dual
@@ -10844,7 +10842,7 @@ UNION ALL SELECT 6004, 'NAICS', 1727, 5611, 3, 1729, 56111, 4 FROM dual
 UNION ALL SELECT 6005, 'SIC', 4284, 9600, 2, 4291, 9640, 3 FROM dual
 UNION ALL SELECT 6006, 'NAICS', 1, 11, 1, 107, 11331, 4 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 6007, 'NAICS', 1419, 512, 2, 1434, 512220, 5 FROM dual
 UNION ALL SELECT 6008, 'NAICS', 1495, 5222, 3, 1502, 522292, 5 FROM dual
 UNION ALL SELECT 6009, 'SIC', 2825, 200, 2, 2843, 273, 4 FROM dual
@@ -11847,7 +11845,7 @@ UNION ALL SELECT 7005, 'NAICS', 1, 11, 1, 59, 112111, 5 FROM dual
 UNION ALL SELECT 7006, 'NAICS', 2061, 8114, 3, 2064, 811412, 5 FROM dual
 UNION ALL SELECT 7007, 'NAICS', 2085, 8123, 3, 2091, 812331, 5 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 7008, 'NAICS', 2103, 813, 2, 2117, 8134, 3 FROM dual
 UNION ALL SELECT 7009, 'SEC', 2677, 6300, 2, 2690, 6399, 4 FROM dual
 UNION ALL SELECT 7010, 'SIC', 3190, 2700, 2, 3211, 2790, 3 FROM dual
@@ -12850,7 +12848,7 @@ UNION ALL SELECT 8006, 'NAICS', 1514, 5231, 3, 1520, 52313, 4 FROM dual
 UNION ALL SELECT 8007, 'NAICS', 2071, 812, 2, 2079, 812199, 5 FROM dual
 UNION ALL SELECT 8008, 'SEC', 2356, 3210, 3, 2357, 3211, 4 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 8009, 'NAICS', 1812, 61, 1, 1837, 611610, 5 FROM dual
 UNION ALL SELECT 8010, 'NAICS', 180, 22, 1, 193, 221121, 5 FROM dual
 UNION ALL SELECT 8011, 'NAICS', 2, 111, 2, 31, 111333, 5 FROM dual
@@ -13853,7 +13851,7 @@ UNION ALL SELECT 9007, 'NAICS', 2071, 812, 2, 2088, 812320, 5 FROM dual
 UNION ALL SELECT 9008, 'SIC', 4146, 8000, 2, 4163, 8062, 4 FROM dual
 UNION ALL SELECT 9009, 'SEC', 2795, 60, 1, 2662, 6140, 3 FROM dual;
 
-INSERT INTO "industry_level" (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
+INSERT INTO industry_level (industry_level_id, industry_classification, ancestor_id, ancestor_code, ancestor_depth, descendant_id, descendant_code, descendant_depth) 
           SELECT 9010, 'SEC', 2434, 3600, 2, 2452, 3674, 4 FROM dual
 UNION ALL SELECT 9011, 'SIC', 3301, 3200, 2, 3327, 3275, 4 FROM dual
 UNION ALL SELECT 9012, 'SIC', 4313, 70, 1, 4017, 7200, 2 FROM dual
@@ -14173,7 +14171,7 @@ UNION ALL SELECT 9325, 'NAICS', 2037, 81, 1, 2078, 812191, 5 FROM dual
 UNION ALL SELECT 9326, 'SIC', 3681, 4810, 3, 3682, 4812, 4 FROM dual
 ;
 
-CREATE TABLE "industry_structure" (
+CREATE TABLE industry_structure (
     industry_structure_id number(19),
     industry_classification varchar2(8) NOT NULL,
     depth integer NOT NULL,
@@ -14181,7 +14179,7 @@ CREATE TABLE "industry_structure" (
     PRIMARY KEY (industry_structure_id)
 );
 
-INSERT INTO "industry_structure" (industry_structure_id, industry_classification, depth, level_name) 
+INSERT INTO industry_structure (industry_structure_id, industry_classification, depth, level_name) 
           SELECT 1, 'SIC', 1, 'Division' FROM dual
 UNION ALL SELECT 2, 'SIC', 2, 'Major Group' FROM dual
 UNION ALL SELECT 3, 'SIC', 3, 'Industry Group' FROM dual

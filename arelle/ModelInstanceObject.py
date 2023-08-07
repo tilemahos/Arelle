@@ -1,3 +1,9 @@
+# Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+
+#line 933   startDatetime is filled with istant and ti is not null see comment about startDatetime on XbrlSemanticsSqlDB.py 
+#line 951  	I removed addOneDay at end date because we dont want the end date to be 1/1 of the next year instead of 31/12 
+
+
 """
 :mod:`arelle.ModelInstanceObjuect`
 ~~~~~~~~~~~~~~~~~~~
@@ -924,7 +930,7 @@ class ModelContext(ModelObject):
         try:
             return self._startDatetime
         except AttributeError:
-            self._startDatetime = XmlUtil.datetimeValue(XmlUtil.child(self.period, XbrlConst.xbrli, "startDate"))
+            self._startDatetime = XmlUtil.datetimeValue(XmlUtil.child(self.period, XbrlConst.xbrli, ("startDate","instant")))
             return self._startDatetime
 
     @startDatetime.setter
@@ -941,7 +947,9 @@ class ModelContext(ModelObject):
         try:
             return self._endDatetime
         except AttributeError:
-            self._endDatetime = XmlUtil.datetimeValue(XmlUtil.child(self.period, XbrlConst.xbrli, ("endDate","instant")), addOneDay=True)
+            self._endDatetime = XmlUtil.datetimeValue(XmlUtil.child(self.period, XbrlConst.xbrli, ("endDate","instant"))
+			#, addOneDay=True
+			)
             return self._endDatetime
 
     @endDatetime.setter

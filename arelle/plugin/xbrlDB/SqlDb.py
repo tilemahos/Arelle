@@ -1,3 +1,12 @@
+
+# Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+
+#line 268 dbTableName I comment out double quotes addition
+#line 320 the command in oracle is lock table not lock
+#line 498 select trigger_name FROM user_triggers (not show)
+#line 508 and an upper
+
+
 '''
 This module provides database interfaces to postgres SQL
 
@@ -256,9 +265,9 @@ class SqlDbConnection():
             return "'" + str(s).replace("'","''").replace('%', '%%') + "'"
 
     def dbTableName(self, tableName):
-        if self.product == "orcl":
-            return '"' + tableName + '"'
-        else:
+      #  if self.product == "orcl":
+      #      return '"' + tableName + '"'
+      #  else:
             return tableName
 
     @property
@@ -308,8 +317,11 @@ class SqlDbConnection():
         ''' lock for an entire transaction has isSessionTransaction=True, locks until commit
             some databases require locks per operation (such as MySQL), when isSessionTransaction=False
         '''
-        if self.product in ("postgres", "orcl") and isSessionTransaction:
+        if self.product in ("postgres",) and isSessionTransaction:
             result = self.execute('LOCK {} IN SHARE ROW EXCLUSIVE MODE'.format(', '.join(tableNames)),
+                                  close=False, commit=False, fetch=False, action="locking table")
+        elif self.product in ("orcl",):
+            result = self.execute('LOCK TABLE {} IN SHARE ROW EXCLUSIVE MODE'.format(', '.join(tableNames)),
                                   close=False, commit=False, fetch=False, action="locking table")
         elif self.product in ("mysql",):
             result = self.execute('LOCK TABLES {}'
@@ -483,7 +495,7 @@ class SqlDbConnection():
                        self.execute({"postgres":"SELECT c.relname FROM pg_class c WHERE c.relkind = 'S';",
                                      "mysql": "SHOW triggers;",
                                      "mssql": "SELECT name FROM sys.triggers;",
-                                     "orcl": "SHOW trigger_name FROM user_triggers"\
+                                     "orcl": "select trigger_name FROM user_triggers"\
                                      }[self.product]))
         except KeyError:
             return set()
@@ -493,7 +505,7 @@ class SqlDbConnection():
             if self.product == "orcl":
                 colTypesResult = self.execute("SELECT column_name, data_type, data_precision, char_col_decl_length "
                                               "FROM user_tab_columns "
-                                              "WHERE table_name = '{0}'"
+                                              "WHERE table_name =upper( '{0}')"
                                               .format( table )) # table name is not " " quoted here
                 colTypes = []
                 for name, fulltype, dataPrecision, charColDeclLength in colTypesResult:
