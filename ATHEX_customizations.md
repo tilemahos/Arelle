@@ -34,5 +34,6 @@ After we forked Arelle we made the following changes
 * arelle\CntlrWebMain.py
 	* line 231   add SeqNo
 	* line 235  	differentiate error messagew for empty file and no zip file  
-
+* arelle\Version.py 	
+	*line 26  get githash bypassed 
 

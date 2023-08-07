@@ -1,3 +1,7 @@
+# Tilemahos Bitsikas t.bitsikas@athexgroup.gr 07/08/2023 I made the following changes 
+
+#line 26  get githash bypassed  
+
 """
 This module represents the time stamp when Arelle was last built
 
@@ -19,9 +23,9 @@ def getBuildVersion() -> str | None:
 
 def getGitHash() -> str | None:
     import subprocess
-    p = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, encoding='utf-8')
-    if not p.stderr:
-        return p.stdout.strip()
+  #  p = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, encoding='utf-8')
+  #  if not p.stderr:
+  #      return p.stdout.strip()
     return None
 
 
