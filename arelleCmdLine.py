@@ -6,6 +6,7 @@ See COPYRIGHT.md for copyright information.
 '''
 import os
 import sys
+import regex
 
 # Only imports for modules distributed as part of the standard Python library may go above this line.
 # All other imports will result in module not found exceptions on the frozen macOS build.
