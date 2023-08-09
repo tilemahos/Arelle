@@ -47,6 +47,7 @@ def main():
        :param argv: Command line arguments.  (Currently supported arguments can be displayed by the parameter *--help*.)
        :type message: [str]
        """
+    print("ATHEX Customized")
     envArgs = os.getenv("ARELLE_ARGS")
     if envArgs:
         args = shlex.split(envArgs)

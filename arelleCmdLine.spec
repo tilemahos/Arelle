@@ -8,7 +8,7 @@ a = Analysis(
     ['arelleCmdLine.py'],
     pathex=[],
     binaries=[],
-    datas=[('arelle\\plugin', 'plugin')],
+    datas=[('arelle\\plugin', 'arelle\\plugin')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
